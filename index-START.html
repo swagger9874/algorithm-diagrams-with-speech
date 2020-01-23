@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech Detection</title>
+  <style>
+    .commandText{
+      position: relative;
+      width: 750px;
+      height: 150px;
+      left: 30%;
+      bottom: 150px;
+    }
+
+    .ml2 {
+      font-weight: 900;
+      font-size: 3.5em;
+    }
+
+    .ml2 .letter {
+      display: inline-block;
+      line-height: 1em;
+    }
+  </style>
+</head>
+<body onload="init()">
+  <!-- En Üstteki div -->
+<div id="sample">
+  <div id="myMotherDiv" style="width:100%; display:flex; justify-content: space-between">
+    <div id="myPaletteDiv" style="width:100px; margin-right:2px; background-color:whitesmoke; border: solid 1px black"></div>
+    <div id="myDiagramDiv" style="flex-grow: 1; height:750px; border: solid 1px black"></div>
+  </div>
+  <div id="commandFloatingTextDiv" class="commandText" style="border: solic 1px black">       
+    <h1 id="commandText" class="ml2"></h1>
+  </div>
+  <div id="commandSigns" style="position:relative; height:350px; bottom: 550px; width: 90px; margin-left: 7px;">
+    <b id="commandPaletteText" style="font-size: 25px; font-family: sans-serif, Arial, Helvetica, sans-serif">
+        <!-- eğer bir komuta denk geliyor ise ve bu komuttan çıkma zorunda kalmadıysak ekranda yazılan komutlar kalıcak, ancak eğer o komuttan çıkarsak, ekrandaki komut listeside gidecek -->
+    </b>
+  </div>
+</div>
+  <!--<div class="words" contenteditable>
+  </div>-->
+<script src="go-debug.js"></script>
+<script src="anime.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+<script src="graphObjectManip.js"></script>
+<script>
+  window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'tr-TR';
+  recognition.interimResults = false;
+  let p = document.createElement('p');
+  let textbx = document.createElement('h1');
+  var oncekiSoz = "";
+  var bagla = -1;
+  var nodeBagla1 = null;
+  var nodeBagla2 = null;
+  var egerNode1 = null;
+  var egerNode2 = null;
+  var evetHayir = -1;
+  var error = false;
+  var adim = 0;
+  var silAdim = 0;
+  var transcript;
+  var arkaPlan = false;
+  var renkNode;
+  var baslangic = true;
+  var hareketNode = null;
+  var anahtarGizle = true;
+  baslangicYanEkranKomutlari();
+  /*const words = document.querySelector('.words');
+  words.appendChild(p);*/
+
+  // eğer herhangi bir eşleşme bulunamazsa buraya girilecek
+  /*recognition.onnomatch = function noMatch(){
+    p = document.createElement('p');
+    p.textContent = "Herhangi bir eşleşme bulunamadı, lütfen yaklaşıp tane tane konuşun.";
+    p.setAttribute("class","warning");
+    words.appendChild(p);
+  }*/
+  recognition.addEventListener('result',e => {
+    //console.log(e.results);
+    transcript = Array.from(e.results)
+      .map(result => result[0]).map(result => result.transcript).join('');
+    const confidence = Array.from(e.results).map(result => result[0]).map(result => result.confidence);
+    //p.textContent = transcript;
+
+    // eğer konuşulan herhangi bir sözcüğün doğruluğu %50'den az ise direk fonksiyondan çık
+    if(confidence < 0.50){
+      console.log("başarısız!");
+      return 0;
+    }
+
+    
+    console.log(transcript);
+    document.getElementById("commandText").innerHTML = transcript;
+    console.log(confidence);
+
+   /* if(e.results[0].isFinal){
+      p = document.createElement('p');
+      words.appendChild(p);
+    }*/
+    //console.log(recognition.lang);
+
+    // // örnek transcript methodu
+    // if(transcript == 'adım' && confidence > 0.5){
+    //   console.log("KARE ÇİZİLİYOR...");
+    //   kareCiz();
+    //   // ard arda 2 kez kare çizilmemesi için ms bazında uyutmak (500ms = yarım saniye)
+    //   sleep(400);
+    //   // bitirmek için
+    //   recognition.addEventListener('end',recognition.start);
+    // }
+
+    // bir sonraki işleme devam etmek için önceki sözün tutulması gerekmektedir.
+
+      baslangic ? baslangicYanEkranKomutlari : baslangic = baslangic;
+
+      if(transcript == "test"){
+        console.log("Test Modu");
+        testCiz();
+      }
+    // çizme modu için başlangıç sözcüğü
+    if ( oncekiSoz == "çiz" || (transcript == "çiz" || transcript == "Çeyiz" && confidence > 0.5)){
+      baslangic = false;
+      
+      console.log("Çizme Modu");
+      console.log("Ne Çizmemi Istersiniz?");
+      // çizden farklı bir komut ile girerse diye sonraki işlemler için değiştiriyoruz
+      (transcript == "Çeyiz") ? transcript = "çiz" : transcript = transcript;
+      if(transcript == "kare" && confidence > 0.5){
+        kareCiz();
+        baslangic = true;
+      }else if((transcript == "başla" && confidence > 0.5) || (transcript == "başlat" && confidence > 0.5)){
+        var model = myDiagram.model;
+        var cizileBilirmi  = baslaBitirSayisiniKontrolEt(model, "Start");
+        cizileBilirmi ? baslaCiz() : console.log("Maksimum sayıda Start Node'u bulunmakta, dahası bu diagram için mümkün değil!");
+        baslangic = true;
+      }else if(transcript == "bitir" && confidence > 0.5){
+        var model = myDiagram.model;
+        var cizileBilirmi  = baslaBitirSayisiniKontrolEt(model, "End");
+        cizileBilirmi ? bitirCiz() : console.log("Maksimum sayıda End Node'u bulunmakta, dahası bu diagram için mümkün değil!");
+        baslangic = true;
+      }else if(transcript == "Eğer" && confidence > 0.5){
+        egerCiz();
+        baslangic = true;
+      }else if(transcript == "yorum" && confidence > 0.5){
+        yorumCiz();
+        baslangic = true;
+      }else if (!(transcript == "çiz") || (oncekiSoz == "çiz")){
+        console.log("Komut Anlaşılmadı, Çizme Modundan Çıkılıyor");
+        baslangic = true;
+      }
+      !(baslangic) ? cizYanEkranKomutlari() : baslangicYanEkranKomutlari();
+      !(oncekiSoz=="çiz") ? oncekiSoz="çiz" : oncekiSoz="";
+    }
+    // Hareket Ettir için Başlangıç Sözcüğü
+    else if ( oncekiSoz == "hareket" || (transcript == "hareket ettir" || transcript == "hareket" && confidence > 0.5)){
+      baslangic = false;
+      var model = myDiagram.model;
+      hareketEttirYanEkranKomutlari(myDiagram.model,1); // burada 1. basamak, yani ekranda hareket ettirilebilecek nodeların listesini veren fonksiyon olacak
+      console.log("Hareket Ettirme Modu");
+      console.log("Hangi Düğümü Hareket Ettirmek Istersiniz?");
+      if(transcript != "hareket ettir" && adim == 1){
+        // şu an hareket edicek olan değeri aldık
+        hareketNode = model.findNodeDataForKey(transcript); // eğer verilen değer ile bir node bulunmadıysa node değişkenimiz null değerini alıcak.
+        if(hareketNode != null){
+          // elimizde artık bir node var. 2. aşama hangi yöne doğru gideceği.
+          console.log("hangi yöne gitsin?");
+          hareketEttirYanEkranKomutlari(myDiagram.model,2); // burada sol,sağ,yukarı,aşağı gibi hareket yön komutları listesini gösteren fonksiyona gidecek
+          adim = 2;
+          return 0;
+        }else{
+          // verilen komut herhangi bir node'a denk gelmedi bu yüzden çıkılacak
+          console.log("verilen komut herhangi bir node'a denk gelmedi. çıkış yapılıyor.");
+          adim = 0;
+          oncekiSoz == "";
+          baslangic = true;
+          return 0;
+        }
+      }else if(transcript != "hareket ettir" && adim == 2){
+        // şu an elimizde hem node, hemde hangi yöne gideceği var.
+        hareketEttir(model, transcript);
+        baslangic = true; // başarıyla tamamlandığı için geri başlangıç yan ekran listesine döndüreceğiz.
+        baslangicYanEkranKomutlari();
+        oncekiSoz = "";
+      }else if(adim == 2){
+        oncekiSoz = "";
+        adim = 0;
+        baslangic = true;
+        console.log("beklenen hata");
+      }
+
+
+      adim == 0 ? adim = 1 : adim = adim;
+      (transcript == "hareket ettir") ? transcript = "hareket" : transcript = transcript;
+      oncekiSoz = "hareket";
+      // burasına devam etmeden önce düğümlerin altına isimlerini yazmamız gerekmektedir
+    }
+    // Çıktı almak için başlangıç sözcüğü
+    else if ( oncekiSoz == "çıktı" || (transcript == "çıktı al" || transcript == "çıktı" && confidence > 0.5)){
+      console.log("Çıktı Alma Modu");
+      oncekiSoz = "çıktı";
+      // burası tüm işlemler bittikten sonra yazılacaktır
+    }
+    // BAĞLAMAK İÇİN başlangıç YERİ BAĞLA
+    // ayrıca bagla == 1 kontrolü kullanmamızın nedeni 3 kez veya daha fazla aynı methoda girmemiz gerekmesi yüzünden;
+    /* Bir methoda 1 kez girildiğinde oncekiSoz değişkeni girdiği methoda ayarlanır. Eğer aynı methoda 2. kez girersek
+       oncekiSoz değişkeni empty string'e atanır. Böylece 3. kez denediğimizde oncekiSoz == "bağla" gibi tanımlar işe
+       yaramamaya başlar. Bu durumdan kurtulmak için 3. kez aynı fonksiyona girmemiz için ayrı bir değişken kullanmamız
+       gerekir, buna çözüm olarak ise bagla adında yeni bir değişken tanımladık ve 2. girişte bunu 1 yaptık ki 3. kez 
+       girdiğimizde bunu kullanarak diğer koşullara takılmadan fonksiyona girmemizi sağladı.*/
+    else if ( oncekiSoz == "bağla" || bagla == 1 || ((transcript == "bağla" && confidence > 0.5) || (transcript == "bağlan" && confidence > 0.5))){
+      console.log("Bağlama Modu");
+      baslangic = false;
+      var model = myDiagram.model;
+      // burası bagla adında bir değişkeni kullanarak bağlama aşamasının hangisinde olduğumuzu çözmemize ve ona göre çıktı vermemize yarıyor
+      switch(bagla){
+        case -1:
+          console.log("Hangi Node'u Bağlamak İstiyorsunuz?");
+          baglaNodeListesi(model);
+          break;
+        case 0:
+          console.log("Ne İle Bağlamak İstiyorsunuz?");
+          baglaNodeListesi(model);
+          break;
+      }
+      (transcript == "bağlan") ? transcript = "bağla" : transcript = transcript;
+      if(oncekiSoz == "bağla" && bagla == 0 && nodeBagla1 == null && transcript != "bağla"){
+        try {
+          var deger = transcript;
+          model = myDiagram.model;
+          nodeBagla1 = model.findNodeDataForKey(deger);
+
+        if(!(bitirdenCikanOkKontrolu(model ,nodeBagla1))){
+          console.log("Seçilen Node bitir node'u ve bitir node'undan ok çıkamaz. Çıkılıyor...");
+          nodeBagla1 = null;
+          nodeBagla2 = null;
+          bagla = -1;
+          oncekiSoz = "";
+          baslangicYanEkranKomutlari();
+          return 0;
+        }
+          console.log("1.Node: " + nodeBagla1.category);
+          //console.log("NNNNNN -- nodebagla1 atandı.")
+          bagla = 1;
+        } catch (error) {
+          bagla = 0;
+          console.log("Hata! --> " + error);
+          console.log("Söylenilen Komutda Hata Bulunmaktadır. Bağlama Methodundan Çıkılıyor...");
+          transcript = "";
+          baslangic = true;
+          
+        }
+      }else if(bagla == 1 && !(nodeBagla1 == null)){
+        var deger = transcript;
+        var model = myDiagram.model;
+        nodeBagla2 = model.findNodeDataForKey(deger);
+        if(!(baslangicGirenOkKontrolu(model, nodeBagla2))){
+          console.log("Seçilen Node baslangic node'u ve baslangic node'una ok gidemez. Çıkılıyor...");
+          nodeBagla1 = null;
+          nodeBagla2 = null;
+          bagla = -1;
+          oncekiSoz = "";
+          baslangicYanEkranKomutlari();
+          return 0;
+        }
+        console.log("2.Node: " + nodeBagla2.category);
+        //console.log("NNNNNN -- nodebagla2 atandı.")
+        model.addLinkData({from:nodeBagla1.key, to:nodeBagla2.key, });
+        bagla = -1;
+        nodeBagla1 = null;
+        nodeBagla2 = null;
+        // alttaki oncekiSoz'u değiştiren kod bağlayı boş bırakması için buraya oncekiSozu Bagla yapmasını söyledik
+        oncekiSoz = "bağla";
+        baslangic = true;
+      }else if (transcript == "bağla"){
+        // eğer bağlama moduna ilk kez giriyorsak bağlayı 0 yapıp artık sayı beklediğimizi anlatıyoruz
+        bagla = 0;
+      }else{
+        // eğer kullanıcı bağlama modunda saçma bir sayı söylerse bağlayı -1 yapıp çıkmayı yapıyoruz
+        bagla = -1;
+        baslangic = true;
+      }
+
+      !(baslangic) ? null : baslangicYanEkranKomutlari();
+      !(oncekiSoz=="bağla") ? oncekiSoz="bağla" : oncekiSoz="";
+      // bağla --->  -2 ---> -3 gibi komutlar verilebilir.
+      // BAĞLA SONU
+    }
+    // eğer başlangıç İÇİN ÖZEL EVET VE HAYIR KODLARI başlangıç SÖZCÜĞÜ
+    else if( oncekiSoz == "eğer" || (transcript == "Eğer" && confidence > 0.5)){
+      console.log("--eğer--")
+      var model = myDiagram.nodeDataArray;
+      baslangic = false;
+      // ilk değeri alıcak komut
+
+      if(transcript != "Eğer"){
+        var deger = transcript;
+        if(egerNode1 == null && adim == 0){
+          var model = myDiagram.model;
+          try {
+            egerNode1 = model.findNodeDataForKey(deger);
+            console.log("Alınan node: " + egerNode1.category);
+            if(egerNode1.category != "Conditional"){
+              console.log("Söylenilen Node bir 'Eğer' Node'u değil. Eğer fonksiyonundan çıkılıyor.");
+              egerNode1 = null;
+              egerNode2 = null;
+              oncekiSoz = "eğer";
+              error = true;
+              baslangic = true;
+            }
+          } catch (error) {
+            console.log("Error -> Eğer (Evet Hayır)" + error);
+            error = true;
+            baslangic = true;
+          }
+          error ? error = false : console.log("Evet Oku mu yoksa Hayır Oku mu?");
+          egerYanEkranKomutlari(myDiagram.model,2);
+        }
+        // evet veya hayır olduğunu anlayacak komut -- evet ise sağdan, hayır ise soldan çıkıcak okumuz (toport)
+        else if(evetHayir == -1){
+            
+            if(transcript == "Evet"){
+              console.log("Seçilen Yön Evet - Sağ");
+              evetHayir = 1;
+              egerYanEkranKomutlari(myDiagram.model);
+              return 0;
+            }else if(transcript == "Hayır"){
+              console.log("Seçilen Yön Hayır - Sol");
+              evetHayir = 0;
+              egerYanEkranKomutlari(myDiagram.model);
+              return 0;
+            }else{
+              console.log("Yönlerde Hata Bulunmaktadır . (evet hayırdan çıkılıyor)");
+              cikisEger();
+            }
+              console.log("Hangi Node ile bağlamak istiyorsunuz");
+          }
+        
+      }else
+        console.log("Hangi Eğer Node'u ile ilgileneceksiniz? (Key değerini söyleyin) ");
+        
+      
+      // 2. değeri alıp oku çizecek komut
+      if (egerNode1 != null && egerNode2 == null && adim == 1) {
+        var deger = transcript;
+        var model = myDiagram.model;
+        try {
+          var egerNode2 = model.findNodeDataForKey(deger);
+          console.log("evetHayır: " + evetHayir + " eN2.cat: " + egerNode2.category);
+          if(evetHayir == 1){
+            console.log("Sağdan Ekleniyor");
+            model.addLinkData({from: egerNode1.key, to: egerNode2.key, fromPort:"R"});
+            cikisEger();
+            baslangic = true;
+          }
+          else if(evetHayir == 0){
+            console.log("Soldan Ekleniyor");
+            model.addLinkData({from: egerNode1.key, to: egerNode2.key, fromPort:"L"});
+            cikisEger();
+            baslangic = true;
+          }
+          else if(evetHayir != -1)
+            console.log("evetHayır Düzgün atanmamış olabilir.");
+            baslangic = true;
+        } catch (error) {
+          // eğer burada hata alıyorsak direk işlemi bozmamız gerekiyor.
+          console.log("Error --> egerN2 " + error);
+          console.log("Söylenilen komutta bir hata bulunmaktadır. Eğer işleminden çıkılıyor.");
+          egerNode1 = null;
+          egerNode2 = null;
+          oncekiSoz = "eğer";
+          transcript = "";
+          adim = 0;
+          baslangic = true;
+        }
+      }else if((egerNode1 != null || egerNode2 != null) && adim == 1){
+        console.log("Bir Hata var egerNode1 ve egerNode2 yi kontrol edin");
+        egerNode1 = null;
+        egerNode2 = null;
+        oncekiSoz = "eğer";
+        transcript = "";
+        baslangic = true;
+      }
+
+      // adım kontrol kodları
+      if(egerNode1 != null && egerNode2 == null){
+        console.log("adim 1 'e geçildi");
+        adim = 1;
+        oncekiSoz = "";
+        egerYanEkranKomutlari(myDiagram.model,2);
+      }else if(egerNode1 == null && egerNode2 == null){
+        console.log("adim 0 'a geçildi");
+        adim = 0;
+        egerYanEkranKomutlari(myDiagram.model);
+      }else{
+        console.log("Hata ile adim 0'a geçildi");
+        adim = 0;
+        baslangic = true;
+      }
+      // oncekiSoz değerini guncelleme
+      !(baslangic) ? null : baslangicYanEkranKomutlari();
+      !(oncekiSoz=="eğer") ? oncekiSoz="eğer" : oncekiSoz="";
+    }
+    // Silme Komutu Başlangıç Sözü
+    else if( (transcript == "sil" && confidence > 0.5) || oncekiSoz == "sil" ){
+      var model = myDiagram.model;
+      console.log("Silme Modu");
+      baslangic = false;
+      // eger adim 0 ise bu komutu hiç yazma
+      if(adim == 0 && oncekiSoz != "sil"){
+        console.log("Hangi Node'u Silmek istersiniz?");
+        oncekiSoz = "sil";
+        adim = 1;
+        silYanekranKomutlari(model);
+        return 0;
+      }
+      // eger adim 1 ise elimizde bir deger vardır demektir. Böylece silme işlemini yapabiliriz
+      if(adim == 1 && transcript != "sil"){
+        var model = myDiagram.model;
+        var deger = transcript;
+        try {
+          
+          // kullanıcıdan node sayısını aldığımızda, node'u model üzerinde bulup silme işlemini uyguluyoruz
+          var node = model.findNodeDataForKey(deger);
+          if(node !== null){
+            console.log("Siliniyor...");
+            model.startTransaction("silmeIslemi");
+            model.removeNodeData(node);
+            model.commitTransaction("silmeIslemi");
+            oklariSil(model,node);
+            transcript = "sil";
+            adim = 0;
+            oncekiSoz = "";
+            baslangic = true;
+          }else{
+            console.log("istenilen node null");
+            oncekiSoz = "";
+            transcript = "sil";
+            adim = 0;
+            baslangic = true;
+          }
+
+        } catch (error) {
+          console.log("Silme Try-Catch'i " + error);
+          oncekiSoz = "";
+          adim = 0;
+          baslangic = true;
+        }
+      }else if (adim == 1){
+        console.log("if'e girilemedi, Çıkılıyor");
+        oncekiSoz = "";
+        transcript = "sil";
+        adim = 0;
+        baslangic = true;
+      }
+      !(baslangic) ? null : baslangicYanEkranKomutlari();
+      console.log("çıkış - sil"); 
+      // BU KOD BİR İŞE YARAMIYOR
+      (transcript == "sil") ? transcript = "sil" : transcript = transcript;
+    }else if(( transcript == "ileri al" || transcript == "geri al") && confidence > 0.5){
+      var model = myDiagram.model;
+      if( transcript == "ileri al"){
+        ileriAl(model);
+      }else if(transcript == "geri al"){
+        geriAl(model);
+      }
+    }
+    // NODE RENKLERİNİ DEĞİŞTİRME İŞLEMLERİ
+    else if( oncekiSoz == "renk" || (transcript == "renk değiştir" && confidence > 0.5)){
+      baslangic = false;
+      
+      
+      // ilk giriş için değerleri aldık
+      if(adim == 0 && oncekiSoz != "renk"){  
+        console.log("Hangi Node'un rengini değiştirmek istersiniz? veya Arkaplanı");
+        adim = 1;
+        oncekiSoz = "renk";
+        renkYanEkranKomutlari(myDiagram.model, 1);
+      }else if(adim == 1 && transcript != "renk değiştir"){
+        // 2. giriş ve node id'si aldığımız yer
+        renkNode = myDiagram.model.findNodeDataForKey(transcript);
+        renkYanEkranKomutlari(myDiagram.model, 2);
+        adim = 2;
+        // oncekiSoz'de bir değişiklik yok.
+        if(renkNode == null) { // eğer renkNode null ise bu findNodeDataForKey methodundan boş döndü demektir, böylece hata verip çıkmamız gerekir
+          if(transcript == "arka plan"){
+            arkaPlan = true;
+            renkYanEkranKomutlari(myDiagram.model, 2);
+            return 0;
+          }
+          console.log("Hata - RENK değiştirme: " + error);
+          adim = 0;
+          oncekiSoz = "";
+          baslangic = true;
+          return 0;
+        }
+      } else if(adim == 2 && transcript != "renk değiştir"){
+        // 3. giriş ve değiştirilmek istenen node rengini aldık
+        var renk = transcript;
+        if(arkaPlan == true)
+          arkaPlanDegistir(renk);
+        else
+          nodeRenkDegistir(myDiagram.model, renkNode, renk);
+        baslangic = true;
+      }
+    }else if(transcript == "anahtar" && confidence > 0.5){
+
+      ekrandakiNodelarinKeyDegerleriniGizle(myDiagram.model);
+    }
+
+    // burada komut alma olayımız bitti
+  }); 
+
+  recognition.addEventListener('end',recognition.start);
+
+  recognition.start();
+
+  // eğer error verirse bize nedenini söyleyecek
+  recognition.onerror = function(event) {
+    console.log("Error--> " + event.error);
+    // eğer error'un nedeni no speech ise floating text'imizi söndürücek
+    if(event.error == "no-speech"){
+      document.getElementById("commandText").innerHTML = "";
+    }
+    //console.log(event.message);
+  };
+
+  function arkaPlanDegistir(renk){
+    var colorMap = {
+      "kırmızı" : "red",
+      "yeşil" : "green",
+      "mavi" : "blue",
+      "turuncu" : "orange",
+      "sarı" : "yellow",
+      "mor" : "purple",
+      "siyah" : "black",
+      "beyaz" : "white",
+      "gri" : "gray"
+    };
+    try {
+      // burada verilen transcript değerini önceden belirlediğimiz renklere eşit ise ingilizceleri ile değiştiriyoruz, eğer yok ise diye try/catch bloğu içinde bulunuyor.
+      var cssMappedRenk = colorMap[renk];
+    } catch (error) {
+      console.log("hata cssMappedRenk: " + error);
+      return 0;
+    }
+    document.getElementById("myDiagramDiv").style.backgroundColor = cssMappedRenk;
+    document.getElementById("myPaletteDiv").style.backgroundColor = cssMappedRenk;
+    baslangicYanEkranKomutlari();
+
+  }
+
+  function hareketEttir(model, yon){
+    var data = myDiagram.findNodeForData(hareketNode);
+    var p = data.location.copy();
+
+    if(yon == "sağ"){
+      p.x += 100;
+      model.setDataProperty(data, "location", p);
+    }else if(yon == "sol"){
+      p.x -= 100;
+      model.setDataProperty(data, "location", p);
+    }else if(yon == "yukarı"){
+      p.y -= 100;
+      model.setDataProperty(data, "location", p);
+    }else if(yon == "aşağı"){
+      p.y += 100;
+      model.setDataProperty(data, "location", p);
+    }else{
+      // buraya eğer yön değeri herhangi bir anlam ifade etmiyorsa giricek
+      console.log("verilen Yön anlaşılmadı veya yanlış verildi, çıkış yapılıyor");
+      baslangicYanEkranKomutlari();
+      adim = 0;
+      oncekiSoz = "";
+    }
+  }
+
+  function nodeRenkDegistir(model, node, renk){
+    var cssMappedRenk;
+    var colorMap = {
+      "kırmızı" : "red",
+      "yeşil" : "green",
+      "mavi" : "blue",
+      "turuncu" : "orange",
+      "sarı" : "yellow",
+      "mor" : "purple",
+      "siyah" : "black",
+      "beyaz" : "white",
+      "gri" : "gray"
+  };
+  try {
+    // burada verilen transcript değerini önceden belirlediğimiz renklere eşit ise ingilizceleri ile değiştiriyoruz, eğer yok ise diye try/catch bloğu içinde bulunuyor.
+    cssMappedRenk = colorMap[renk];
+  } catch (error) {
+    console.log("hata cssMappedRenk: " + error);
+    return 0;
+  }
+    model.setDataProperty(node, "fill", cssMappedRenk);
+    baslangicYanEkranKomutlari();
+    adim = 0;
+  }
+
+  function oklariSil(model,node){
+    // linkDataArray'in içindeki to ve from değerlerini kontrol edicez ve silinen node'a bağlı arrow var ise silicez.
+    var arrows = model.linkDataArray;
+    var arrowsLength = arrows["length"];
+    console.log("arrowsLength: " + arrowsLength);
+    var nodeKey = node.key;
+    var nodeKeyFrom;
+    var nodeKeyTo;
+    for (let i = 0; i < arrowsLength; i++) {
+      nodeKeyFrom = arrows[i].from;
+      console.log("NodeKeyFrom:" + nodeKeyFrom);
+      nodeKeyTo = arrows[i].to;
+      console.log("NodeKeyTo:" + nodeKeyTo);
+      if(nodeKeyFrom == nodeKey){
+        //silme işlemi
+        console.log("(from) başarıyla bulundu silinen node id:" + nodeKeyFrom);
+        model.removeLinkData(arrows[i]);
+        i--;
+        
+      }else if(nodeKeyTo == nodeKey){
+        //silme işlemi
+        console.log("(to) başarıyla bulundu silinen node id:" + nodeKeyTo);
+        model.removeLinkData(arrows[i]);
+        i--;
+      }
+    }
+
+  }
+
+  // program ilk başladığında söylenebilecek komutların listesi burada olacak
+  function baslangicYanEkranKomutlari(){
+    console.log("baslangicYanEkranKomutlari");
+    var elementList = ["Çiz", "Bağla", "Sil", "Hareket ettir", "Eğer", "Çıktı al", "Geri al", "İleri al", "Renk değiştir", "Anahtar"];
+    // Çiz, Bağla, Sil, Geri Al, İleri Al, Hareket Ettir, Çıktı Al, Eğer, Renk Değiştir
+    var strongText = document.createElement("strong");
+    strongText.id = "strongText";
+    var boldText = document.getElementById("commandPaletteText");
+    var eskiStrongText = document.getElementById("strongText");
+    boldText.style.fontSize = "14px";
+    elementList.forEach(element => {
+      strongText.innerHTML += element + "<br>";
+    });
+    eskiStrongText != null ? boldText.replaceChild(strongText, eskiStrongText) : boldText.appendChild(strongText);
+  }
+
+  function hareketEttirYanEkranKomutlari(model, basamak){
+    // basamak 1 ise hangi nodeların olduğunu listeleyecek, eğer basamak 2 ise yönleri listeleyecek
+    console.log("hareket ediyoruz. basamak da bu=" + basamak);
+    console.log("model ise bu" + model.nodeDataArray.forEach(element => {element.key}));
+    var nodeDataArray = model .nodeDataArray;
+    var strongText = document.createElement("strong");
+    var boldText = document.getElementById("commandPaletteText");
+    var eskiStrongText = document.getElementById("strongText");
+    strongText.id = "strongText";
+    if(basamak == 1){ // nodeların olduğu liste
+      nodeDataArray.forEach(element =>{
+        strongText.innerHTML += element.key + " " + element.category + "<br>";
+      });
+    }else if(basamak = 2){ // yönler dönecek
+    var yonler = ["Sağ", "Sol", "Yukarı", "Aşağı"];
+    yonler.forEach(element =>{
+      strongText.innerHTML += element + "<br>";
+    });
+
+    }else{
+      console.log("verilen basamak değeri veya model değerinde bir hata var çıkış yapılıyor.");
+      basamak = 0;
+      baslangicYanEkranKomutlari();
+      return 0;
+    }
+    boldText.replaceChild(strongText, eskiStrongText);
+
+  }
+
+  function ekrandakiNodelarinKeyDegerleriniGizle(model){
+    // myDiagram.findNodeForKey("-1").findObject("key").visible = true;
+    // direk bunu kullanarak tüm ekranın key değerlerini silemeyiz bu yüzden hepsini tek tek id lerini alarak yapıcaz :(
+    var nodeDataArray = model.nodeDataArray;
+    var keyList = [];
+    nodeDataArray.forEach(element =>{ // tüm node değerlerini aldık, keylerini çıkartabilmek için
+      keyList.push(element.key);
+    });
+    if(anahtarGizle){
+      keyList.forEach(key=>{ // alınan tüm key değerlerini false olarak değiştirdik
+        myDiagram.findNodeForKey(key).findObject("key").visible = false;
+      });
+      anahtarGizle = false;
+    }else{
+      keyList.forEach(key=>{ // alınan tüm key değerlerini false olarak değiştirdik
+        myDiagram.findNodeForKey(key).findObject("key").visible = true;
+      });
+      anahtarGizle = true;
+    }
+    
+  }
+
+  function renkYanEkranKomutlari(model, basamak){
+    // basamak 1 ise nodeid ve arkaplanı, 2 ise hangi renk olacağını döndericez
+    var nodeDataArray = model.nodeDataArray;
+    var strongText = document.createElement("strong");
+    var boldText = document.getElementById("commandPaletteText");
+    var eskiStrongText = document.getElementById("strongText");
+    strongText.id = "strongText";
+    if(basamak == 1){ // node id leri ve arkaplan dönücek
+      nodeDataArray.forEach(element => {
+      strongText.innerHTML += element.key + " " + element.category + "<br>";
+    });
+      strongText.innerHTML += "Arkaplan";
+    }else if(basamak == 2){ // renkler dönücek
+      var colorMap = ["kırmızı", "yeşil", "mavi", "turuncu", "sarı", "mor", "siyah", "beyaz", "gri"];
+      colorMap.forEach(element => {
+        strongText.innerHTML += element + "<br>";
+      });
+    }
+    boldText.replaceChild(strongText, eskiStrongText);
+  }
+
+  function silYanekranKomutlari(model){
+    var nodeDataArray = model.nodeDataArray;
+    var strongText = document.createElement("strong");
+    var boldText = document.getElementById("commandPaletteText");
+    var eskiStrongText = document.getElementById("strongText");
+    strongText.id = "strongText";
+    if(nodeDataArray.length < 1){
+      // yan ekrana yeterince node yok yazdır.
+      console.log("yeterince node yok");
+      strongText.innerHTML = "Yeterince Node Yok";
+      baslangic = true;
+    }
+    // eğer yeterince node var ise o node ların id lerini alt alta yazıcak
+    else{
+      nodeDataArray.forEach(element => {
+        strongText.innerHTML += element.key + " " + element.category + "<br>";
+      });
+    }
+    boldText.replaceChild(strongText, eskiStrongText);
+  }
+
+  function cizYanEkranKomutlari(){
+    var elementList = ["Başla", "Kare", "Eğer", "Bitir", "Yorum"];
+    var strongText = document.createElement("strong");
+    var boldText = document.getElementById("commandPaletteText");
+    var eskiStrongText = document.getElementById("strongText");
+    strongText.id = "strongText";
+    elementList.forEach(element => {
+      strongText.innerHTML += element + "<br>";
+    });
+    boldText.replaceChild(strongText, eskiStrongText);
+  }
+
+  function egerYanEkranKomutlari(model, basamak = 1){
+    var nodeDataArray = model.nodeDataArray;
+    var strongText = document.createElement("strong");
+    var boldText = document.getElementById("commandPaletteText");
+    var eskiStrongText = document.getElementById("strongText");
+    strongText.id = "strongText";
+    if(basamak == 1){  
+      if(nodeDataArray < 2){
+        console.log("yeterince node yok");
+        strongText.innerHTML = "Yeterince Node Yok";
+      }else{
+        nodeDataArray.forEach(element => {
+          strongText.innerHTML += element.key + " " + element.category + "<br>";
+        });
+      }
+      boldText.replaceChild(strongText, eskiStrongText);
+    }else if(basamak == 2){
+      strongText.innerHTML = "Evet<br>Hayır";
+      boldText.replaceChild(strongText, eskiStrongText);
+    }
+  }
+
+  function baglaNodeListesi(model){
+    var nodeDataArray = model.nodeDataArray;
+    var strongText = document.createElement("strong");
+    var boldText = document.getElementById("commandPaletteText");
+    var eskiStrongText = document.getElementById("strongText");
+    strongText.id = "strongText";
+    // eğer hiç node yok ise bağlama da yok
+    if(nodeDataArray.length < 2){
+      // yan ekrana yeterince node yok yazdır.
+      console.log("yeterince node yok");
+      strongText.innerHTML = "Yeterince Node Yok";
+      baslangic = true;
+    }
+    // eğer yeterince node var ise o node ların id lerini alt alta yazıcak
+    else{
+      nodeDataArray.forEach(element => {
+        strongText.innerHTML += element.key + " " + element.category + "<br>";
+      });
+    }
+    boldText.replaceChild(strongText, eskiStrongText);
+  }
+
+  function baslaBitirSayisiniKontrolEt(model, nodeTuru){
+    // düzenleme : if'ler silinebilir. çünkü fonksiyonun durumu her türlü node'a uygulanabilir durumda.
+    if(nodeTuru == "Start"){
+
+      var nodeSayisi = 1;
+      var arraydekiNodeSayisi = 0;
+      nodeArray = model.nodeDataArray;
+      nodeArray.forEach(element => {
+      if( nodeTuru == element.category )
+        arraydekiNodeSayisi++;  
+      });
+      if (nodeSayisi > arraydekiNodeSayisi)
+        return true;
+      else
+        return false;
+
+    }else if(nodeTuru == "End"){
+
+      var nodeSayisi = 1;
+      var arraydekiNodeSayisi = 0;
+      nodeArray = model.nodeDataArray;
+      nodeArray.forEach(element => {
+      if( nodeTuru == element.category )
+        arraydekiNodeSayisi++;  
+      });
+      if (nodeSayisi > arraydekiNodeSayisi)
+        return true;
+      else
+        return false;
+    }
+
+  }
+
+  function bitirdenCikanOkKontrolu(model, node){
+    // burada kaldım
+    // burada bitir node'una ok götürmeye çalışınıyorsa bunu durdurmaya çalışıcaz
+    if(node.category == "End")
+      return false;
+    else
+      return true;
+  }
+
+  function baslangicGirenOkKontrolu(model, node){
+    // burada kaldım
+    // burada başla node'undan ok çıkarılmaya çalışınıyorsa bunu durdurmaya çalışıcaz
+    if(node.category == "Start")
+      return false;
+    else
+      return true;
+
+  }
+
+  function ileriAl(model){
+    myDiagram.commandHandler.redo();
+  }
+
+  function geriAl(model){
+    myDiagram.commandHandler.undo();
+  }
+
+  function cikisEger(){
+  egerNode1 = null;
+  egerNode2 = null;
+  evetHayir = -1;
+  error = false;
+  adim = 0;
+  baslangic = true;
+  }
+
+  // çizimlerin tekrar etmemesi için sistemi belirli mili saniyelerde uyutmamız gerekiyor
+  function sleep(milliseconds) {
+  var start = new Date().getTime();
+  for (var i = 0; i < 1e7; i++) {
+    if ((new Date().getTime() - start) > milliseconds){
+      break;
+    }
+  }
+}
+
+/* BURASI EKRANDA FLOATING TEXT YAPMAYA YARAYAN KODLARI BARINDIRAN JS KODLARINA DEVAM EDER*/
+// Wrap every letter in a span
+$('.ml2').each(function(){
+  $(this).html($(this).text().replace(/([^\x00-\x80]|\w)/g, "<span class='letter'>$&</span>"));
+});
+
+anime.timeline({loop: true})
+  .add({
+    targets: '.ml2 .letter',
+    scale: [4,1],
+    opacity: [0,1],
+    translateZ: 0,
+    easing: "easeOutExpo",
+    duration: 0,
+    delay: function(el, i) {
+      return 70*i;
+    }
+  }).add({
+    targets: '.ml2',
+    opacity: 0,
+    duration: 5000,
+    easing: "easeOutExpo",
+    delay: 8000
+  });
+  /*FLOATING TEXT JS KOMUTLARI SONU*/
+
+
+</script>
+</body>
+</html>
